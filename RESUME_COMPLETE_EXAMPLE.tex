@@ -1,0 +1,81 @@
+% ============================================
+% COMPLETE RESUME EXAMPLE
+% Shows how to integrate the project into a full resume
+% ============================================
+
+\documentclass[letterpaper,11pt]{article}
+
+% Required packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fontawesome5}
+\usepackage[left=0.75in,top=0.6in,right=0.75in,bottom=0.6in]{geometry}
+
+% Custom colors
+\usepackage{xcolor}
+\definecolor{linkcolor}{RGB}{0,102,204}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=linkcolor,
+    urlcolor=linkcolor,
+    citecolor=linkcolor
+}
+
+% Custom commands
+\newcommand{\resumeItem}[1]{\item\small{#1 \vspace{-2pt}}}
+\newcommand{\resumeSubheading}[4]{
+    \vspace{-1pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+        \textbf{#1} & #2 \\
+        \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-5pt}
+}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeItemListEnd}{\end{itemize}}
+
+\begin{document}
+
+% Header
+\begin{center}
+    {\Huge \textbf{Your Name}} \\ \vspace{1pt}
+    \small \faEnvelope\ your.email@example.com $|$ 
+    \faPhone\ +1 (555) 123-4567 $|$ 
+    \faLinkedin\ \href{https://linkedin.com/in/yourprofile}{linkedin.com/in/yourprofile} $|$
+    \faGithub\ \href{https://github.com/AkashParley}{github.com/AkashParley}
+\end{center}
+
+% Projects Section
+\section{Projects}
+\resumeItemListStart
+    \resumeSubheading
+        {GitHub Repository Summarizer}{Personal Project}
+        {Full-Stack Developer}{Jan 2025 -- Present}
+        \resumeItemListStart
+            \resumeItem{Designed and developed an AI-powered web application for automated GitHub repository analysis and documentation generation}
+            \resumeItem{Implemented backend API using Express.js with Google Gemini AI integration for intelligent code summarization and architectural analysis}
+            \resumeItem{Built responsive React frontend with modern UI components, real-time progress tracking, and interactive file tree visualization}
+            \resumeItem{Integrated Redis caching layer to optimize performance and reduce redundant API calls}
+            \resumeItem{Technologies: React, Node.js, Express.js, Google Gemini AI, Redis, Tailwind CSS, Vite, Git}
+            \resumeItem{\href{https://github.com/AkashParley/Github_Repo_Summarizer}{GitHub: github.com/AkashParley/Github\_Repo\_Summarizer}}
+        \resumeItemListEnd
+\resumeItemListEnd
+
+% Alternative: Simple Projects Section
+% \section{Projects}
+% \begin{itemize}[leftmargin=0.15in, label={}]
+%     \small{\item
+%         \textbf{GitHub Repository Summarizer} \hfill \textit{Full-Stack Web Application}
+%         \begin{itemize}[leftmargin=0.3in]
+%             \item Developed AI-powered web application for automated GitHub repository analysis using Google Gemini AI
+%             \item Built Express.js backend with streaming API responses and Redis caching
+%             \item Created React frontend with Tailwind CSS featuring interactive file tree visualization
+%             \item Technologies: React, Node.js, Express.js, Google Gemini AI, Redis, Tailwind CSS, Vite
+%             \item \href{https://github.com/AkashParley/Github_Repo_Summarizer}{GitHub Repository}
+%         \end{itemize}
+%     }
+% \end{itemize}
+
+\end{document}
+
