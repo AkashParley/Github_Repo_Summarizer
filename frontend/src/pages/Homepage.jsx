@@ -1102,8 +1102,7 @@ function Homepage() {
 
     try {
       // Use proper environment variable format based on your bundler
-      const baseUrl =
-        import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
       // Test backend connection first
       try {
         const healthCheck = await fetch(`${baseUrl}/api/health`, {
@@ -1117,7 +1116,7 @@ function Homepage() {
         console.warn("Could not reach backend health endpoint");
       }
 
-      const response = await fetch(`${baseUrl}/api/repos/clone`, {
+       const response = await fetch(`${baseUrl}/summarize`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
