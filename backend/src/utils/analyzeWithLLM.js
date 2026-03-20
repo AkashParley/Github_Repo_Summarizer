@@ -11,6 +11,61 @@ if (!process.env.GEMINI_API_KEY) {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Global throttle to ensure we never hit the Gemini API too quickly.
+// This matters because the backend uses Promise.all with concurrency (multiple batches),
+// and rate limits can be triggered by bursts rather than average usage.
+const MIN_GEMINI_CALL_GAP_MS = Number(process.env.GEMINI_MIN_CALL_GAP_MS || 6500);
+let lastCallTime = 0;
+let geminiCallQueue = Promise.resolve();
+
+const enqueueGeminiCall = (callFn) => {
+  // Serialize calls: each call waits until the previous one finishes + spacing.
+  const task = geminiCallQueue.then(async () => {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastCallTime;
+    const waitMs = Math.max(0, MIN_GEMINI_CALL_GAP_MS - timeSinceLastCall);
+    if (waitMs > 0) await sleep(waitMs);
+    lastCallTime = Date.now();
+    return callFn();
+  });
+
+  // Keep the queue moving even if the call fails.
+  geminiCallQueue = task.catch(() => {});
+  return task;
+};
+
+const parseRetryDelayMs = (err) => {
+  // The SDK error message often includes: "Please retry in 45.744s" or "retryDelay":"45s"
+  const msg = String(err?.message || '');
+  const sMatch = msg.match(/retry in\s+(\d+(?:\.\d+)?)s/i);
+  if (sMatch) return Math.ceil(parseFloat(sMatch[1]) * 1000);
+  const jsonMatch = msg.match(/"retryDelay"\s*:\s*"(\d+)s"/i);
+  if (jsonMatch) return parseInt(jsonMatch[1], 10) * 1000;
+  return null;
+};
+
+const isRateLimitError = (err) => {
+  const msg = String(err?.message || '');
+  return msg.includes('429') || /too many requests/i.test(msg) || /quota exceeded/i.test(msg);
+};
+
+const generateWithRetry = async (model, prompt, { maxRetries = 3 } = {}) => {
+  let attempt = 0;
+  // Basic retry with server-provided delay (when present)
+  while (true) {
+    try {
+      return await enqueueGeminiCall(() => model.generateContent(prompt));
+    } catch (err) {
+      attempt += 1;
+      if (attempt > maxRetries || !isRateLimitError(err)) throw err;
+      const retryDelayMs = parseRetryDelayMs(err) ?? (1000 * attempt * attempt);
+      await sleep(retryDelayMs);
+    }
+  }
+};
+
 // Gemini 1.5 Flash model for per-file summarization
 const summarizeBatch = async (batch) => {
   if (!process.env.GEMINI_API_KEY) {
@@ -39,24 +94,26 @@ const summarizeBatch = async (batch) => {
    - Point out any noteworthy implementation techniques or trade-offs.
    - Mention performance optimizations, reusable patterns, or code modularity techniques.
 
-Use bullet points and short paragraphs. Stay under 300 words. Do not list files individually.
+Use bullet points and short paragraphs. Stay under 320 words.
+Reference concrete file paths from the input (max 4 paths) as evidence for the most important claims.
+Avoid listing every file; focus on the specific modules/functions that drive the behavior.
 
 \`\`\`
 ${filesText}
 \`\`\``;
 
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite-001' });
-  const result = await model.generateContent(prompt);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+  const result = await generateWithRetry(model, prompt, { maxRetries: 4 });
   return await result.response.text();
 };
 
 // Higher-level architecture summary from all batches
-const summarizeBatches = async (batches) => {
-  const batchSummaries = await Promise.all(
-    batches.map(batch => summarizeBatch(batch))
-  );
+const summarizeBatches = async (batchSummaries, techStack = []) => {
   const combinedSummaries = batchSummaries.join('\n\n');
+  const techStackText = Array.isArray(techStack)
+    ? techStack.filter(Boolean).join(', ')
+    : String(techStack || '');
 
   const finalPrompt = `You are a senior software architect tasked with producing a **deep architectural and functional analysis** based on multiple source code summaries. Your goal is to help engineers, tech leads, and system architects understand not just *what* this codebase does, but *how* it works internally—its structure, logic flow, and systemic behaviors.
 
@@ -72,7 +129,15 @@ const summarizeBatches = async (batches) => {
   - Understanding of how core functions work *end-to-end*, not just high-level overviews.
   - Reasoning about scalability, flexibility, data consistency, and code quality.
   
-  📌 Format your response using the following **EXACT structure**. Each section should contain **2–3 focused and technically meaningful bullet points**, using formal, precise language. Avoid repetition or vague generalizations.
+  You will also be given a "techStack" signal (detected languages/framework hints) derived from the repo file tree.
+  Use it to produce a repo-grounded "Tech Stack Used" section. Do not invent frameworks not present in the input; if techStack is empty, say "Not enough evidence from the provided tree".
+
+  TechStack signal (languages/tools) as provided:
+  ${techStackText || '[]'}
+  
+  📌 Format your response using the following **EXACT structure**. Each section should contain **2–3 focused and technically meaningful bullet points** using formal, precise language.
+  Also, make at least **one bullet** per section **repo-grounded** by referencing the most relevant file paths (from the provided summaries), but do not list more than **2 paths** per section.
+  Avoid repetition or vague generalizations.
   
   ---
   
@@ -80,6 +145,10 @@ const summarizeBatches = async (batches) => {
   - Describe the high-level system architecture (monolith, modular, service-based, SSR/CSR mix, etc.)
   - Identify how responsibilities are distributed across layers or modules (e.g., presentation, business logic, persistence).
   
+  **Tech Stack Used**
+  - List the primary languages and technologies from the provided techStack signal, and explain how they shape implementation style and constraints.
+  - Call out any tooling or runtime coupling that is directly implied by the stack (e.g., Node/Express vs Python/Flask), based only on the input evidence.
+
   **Main Components / Services**
   - Highlight critical services/modules, their roles, and how they interoperate.
   - Mention any separation of concerns or communication interfaces between them (e.g., service APIs, shared utilities, event buses).
@@ -150,8 +219,8 @@ const summarizeBatches = async (batches) => {
   \`\`\``;
   
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
-  const result = await model.generateContent(finalPrompt);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+  const result = await generateWithRetry(model, finalPrompt, { maxRetries: 4 });
   const finalSummary = await result.response.text();
 
   return {
@@ -239,8 +308,8 @@ Use proper Markdown formatting and include the following sections:
 Now, generate a complete and polished \`README.md\`:
 `;
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite-001" });
-  const result = await model.generateContent(prompt);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+  const result = await generateWithRetry(model, prompt, { maxRetries: 4 });
   const readme = await result.response.text();
 
   return readme;

@@ -96,6 +96,7 @@ const formSchema = z.object({
 const FileTreeItem = ({ item, depth = 0, expandedPaths = {}, onToggle }) => {
   const hasChildren = item.children && item.children.length > 0;
   const isOpen = expandedPaths[item.path] || false;
+  const railWidth = depth * 16 + 8;
 
   const toggleOpen = () => {
     if (hasChildren && onToggle) {
@@ -188,12 +189,24 @@ const FileTreeItem = ({ item, depth = 0, expandedPaths = {}, onToggle }) => {
   return (
     <div className="select-none">
       <div
-        className={`flex items-center py-1.5 px-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer ${
+        className={`relative flex items-center py-1.5 px-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer ${
           depth === 0 ? "bg-blue-50/50 dark:bg-blue-900/20" : ""
         }`}
         onClick={toggleOpen}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
+        {depth > 0 && (
+          <div
+            aria-hidden="true"
+            className="relative shrink-0"
+            style={{ width: railWidth }}
+          >
+            {/* Vertical connector */}
+            <div className="absolute left-3 top-0 bottom-0 w-px bg-slate-200 dark:bg-slate-700" />
+            {/* Horizontal elbow to the node */}
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-px bg-slate-200 dark:bg-slate-700" />
+          </div>
+        )}
+
         {hasChildren ? (
           isOpen ? (
             <ChevronDown className="h-4 w-4 mr-1 text-slate-500" />
@@ -2013,6 +2026,90 @@ function Homepage() {
 
       const conclusionLines = doc.splitTextToSize(conclusionText, 180);
       doc.text(conclusionLines, 15, summaryY);
+
+      // Append a nice file tree visualization at the end of the report.
+      // The UI already renders a tree; here we reuse the same idea in PDF form.
+      if (fileTree && Array.isArray(fileTree) && fileTree.length > 0) {
+        addPage();
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(...colors.heading);
+        doc.text("Repository File Tree", 105, 28, { align: "center" });
+
+        // Start below header area
+        let yTree = 40;
+        const maxTreeDepth = 8;
+
+        const sortTreeItems = (items) => {
+          return [...items].sort((a, b) => {
+            // Folders first, then files, then name
+            if (a.type === "folder" && b.type !== "folder") return -1;
+            if (a.type !== "folder" && b.type === "folder") return 1;
+            return a.name.localeCompare(b.name);
+          });
+        };
+
+        const getTreeItemColor = (item) => {
+          if (item.type === "folder") return { r: 180, g: 100, b: 0 }; // amber-ish
+          const ext = item.name.split(".").pop()?.toLowerCase();
+          if (["js", "jsx", "ts", "tsx"].includes(ext))
+            return { r: 20, g: 100, b: 200 }; // code
+          if (["md", "txt", "markdown"].includes(ext))
+            return { r: 80, g: 80, b: 120 }; // docs
+          if (["json", "yml", "yaml", "toml"].includes(ext))
+            return { r: 110, g: 70, b: 160 }; // config
+          return { r: 80, g: 90, b: 100 }; // default
+        };
+
+        const renderTree = (items, level = 0) => {
+          if (!items || items.length === 0 || level > maxTreeDepth) return;
+          const sorted = sortTreeItems(items);
+
+          for (const item of sorted) {
+            if (yTree > 270) {
+              addPage();
+              // Repeat title on continuation pages
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(12);
+              doc.setTextColor(...colors.heading);
+              doc.text("Repository File Tree (continued)", 105, 28, { align: "center" });
+              yTree = 40;
+            }
+
+            const indent = level * 3.5;
+            const prefix = item.type === "folder" ? "+ " : "- ";
+            const color = getTreeItemColor(item);
+
+            doc.setFont("helvetica", item.type === "folder" ? "bold" : "normal");
+            doc.setFontSize(item.type === "folder" ? 8.5 : 8);
+            doc.setTextColor(color.r, color.g, color.b);
+
+            let displayName = item.name || "";
+            // Truncate very long names to prevent overflow
+            const maxTextWidth = 190 - indent;
+            if (doc.getTextWidth(prefix + displayName) > maxTextWidth - 5) {
+              while (
+                displayName.length > 6 &&
+                doc.getTextWidth(prefix + displayName + "...") > maxTextWidth
+              ) {
+                displayName = displayName.slice(0, -1);
+              }
+              displayName += "...";
+            }
+
+            doc.text(prefix + displayName, 10 + indent, yTree);
+
+            yTree += item.type === "folder" ? 4.2 : 3.6;
+
+            if (item.type === "folder" && item.children && item.children.length > 0) {
+              renderTree(item.children, level + 1);
+            }
+          }
+        };
+
+        renderTree(fileTree, 0);
+      }
 
       // Save the PDF
       const cleanRepoName = repoName

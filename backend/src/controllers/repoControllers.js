@@ -5,6 +5,7 @@ import redis from '../utils/redis.js';
 import dotenv from 'dotenv';
 import { buildFileTree } from '../utils/fileTree.js';
 import { summarizeBatch, summarizeBatches, generateReadme } from '../utils/analyzeWithLLM.js';
+import { analyzeRepo } from '../detectors/languageFrameworkDetector.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -129,8 +130,13 @@ const cloneRepoHandler = async (req, res) => {
       }) + '\n');
     }
 
-    const { finalSummary } = await summarizeBatches(batches);
+    // Generate repo "tech stack" signal from the file tree (used for clearer analysis).
+    // fileTreePromise started earlier, so awaiting here doesn't add much overhead.
     const fileTree = await fileTreePromise;
+    const { languages } = await analyzeRepo({ tree: fileTree });
+
+    // IMPORTANT: avoid re-summarizing batches (saves Gemini quota + reduces 429s)
+    const { finalSummary } = await summarizeBatches(batchSummaries, languages);
 
     res.write(JSON.stringify({ step: 'readme', message: 'Generating README.md' }) + '\n');
     const readme = await generateReadme(fileTree, finalSummary, batchSummaries);

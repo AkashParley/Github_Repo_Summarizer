@@ -8,6 +8,33 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const buildAuthenticatedGitHubUrl = (repoUrl) => {
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) return repoUrl;
+
+    try {
+        const urlObj = new URL(repoUrl);
+
+        // Only inject token for HTTPS GitHub URLs that don't already include credentials
+        if (
+            urlObj.protocol !== 'https:' ||
+            !urlObj.hostname.includes('github.com') ||
+            urlObj.username ||
+            urlObj.password
+        ) {
+            return repoUrl;
+        }
+
+        // GitHub supports: https://x-access-token:<TOKEN>@github.com/owner/repo.git
+        urlObj.username = 'x-access-token';
+        urlObj.password = token;
+        return urlObj.toString();
+    } catch {
+        // If it's not a valid URL (or something unexpected), just use original
+        return repoUrl;
+    }
+};
+
 const cloneRepo = async (repoUrl) => {
     try {
         const rawName = repoUrl.split('/').pop() || 'repo';
@@ -21,7 +48,9 @@ const cloneRepo = async (repoUrl) => {
 
         // ⚡ Clone only the latest snapshot of the repo
         // In gitService.js
-        await git.clone(repoUrl, tempDir, [
+        const cloneUrl = buildAuthenticatedGitHubUrl(repoUrl);
+
+        await git.clone(cloneUrl, tempDir, [
             '--depth', '1',
             '--single-branch',
             '--no-tags',
