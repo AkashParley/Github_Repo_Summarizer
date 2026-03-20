@@ -1116,13 +1116,13 @@ function Homepage() {
         console.warn("Could not reach backend health endpoint");
       }
 
-       const response = await fetch(`${baseUrl}/summarize`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ repoUrl: data.githubUrl }),
-      });
+        const response = await fetch(`${baseUrl}/api/repos/clone`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ repoUrl: data.githubUrl }),
+        });
 
       if (!response.ok) {
         const errorData = await response.json();
