@@ -1102,7 +1102,9 @@ function Homepage() {
 
     try {
       // Use proper environment variable format based on your bundler
-      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
+      const baseUrl = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
+
+      
       // Test backend connection first
       try {
         const healthCheck = await fetch(`${baseUrl}/api/health`, {
@@ -1116,13 +1118,27 @@ function Homepage() {
         console.warn("Could not reach backend health endpoint");
       }
 
-        const response = await fetch(`${baseUrl}/api/repos/clone`, {
+        const API_ENDPOINT = `${baseUrl}/api/repos/clone`;
+        const response = await fetch(API_ENDPOINT, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ repoUrl: data.githubUrl }),
         });
+
+
+        const contentType = response.headers.get("content-type");
+
+        if (!response.ok || !contentType || !contentType.includes("application/json")) {
+          const errorText = await response.text();
+          console.error("Server returned non-JSON response:", errorText);
+          
+          if (response.status === 404) {
+            throw new Error(`Route not found (404). Check if ${API_ENDPOINT} is correct.`);
+          }
+          throw new Error(`Server Error (${response.status}). The backend might still be waking up.`);
+        }
 
       if (!response.ok) {
         const errorData = await response.json();
