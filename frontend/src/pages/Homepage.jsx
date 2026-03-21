@@ -1103,30 +1103,17 @@ function Homepage() {
     try {
       // Use proper environment variable format based on your bundler
       const baseUrl = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
+      const API_ENDPOINT = `${baseUrl}/api/repos/clone`;
 
-      
-      // Test backend connection first
-      try {
-        const healthCheck = await fetch(`${baseUrl}/api/health`, {
-          method: "GET",
-        }).catch(() => null);
-        
-        if (!healthCheck || !healthCheck.ok) {
-          console.warn("Backend health check failed, but continuing...");
-        }
-      } catch (e) {
-        console.warn("Could not reach backend health endpoint");
-      }
+    // 1. Optional: Background Health Check
+      fetch(`${baseUrl}/api/health`).catch(() => console.warn("Backend waking up..."));
 
-        const API_ENDPOINT = `${baseUrl}/api/repos/clone`;
-        const response = await fetch(API_ENDPOINT, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ repoUrl: data.githubUrl }),
-        });
-
+    // 2. The Main Request
+      const response = await fetch(API_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl: data.githubUrl }),
+      });
 
         const contentType = response.headers.get("content-type");
 
@@ -1179,7 +1166,7 @@ function Homepage() {
       let errorMessage = err.message || "An error occurred during analysis";
       
       if (err.message === "Failed to fetch" || err.name === "TypeError") {
-        const baseUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+        const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
         errorMessage = `Cannot connect to backend server at ${baseUrl}. Please make sure:
         - The backend server is running (npm start in backend directory)
         - The server is running on the correct port (default: 3001)
