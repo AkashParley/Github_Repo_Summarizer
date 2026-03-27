@@ -16,7 +16,7 @@ This project is targeted towards software developers, technical writers, and any
 ## Technologies Used
 
 *   **Frontend:** React, Radix UI (likely), Zod (for input validation), Context API (likely), MarkdownRenderer (Custom)
-*   **Backend:** Express.js
+*   **Backend:** Node.js ,Express.js
 *   **LLM Integration:** Google's Gemini (or similar)
 *   **Caching:** Redis
 *   **File System Operations:** Git
